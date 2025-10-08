@@ -148,12 +148,12 @@ async def main_loop():
             start = time.time()
             info = await check_once(session)
             if info:
-                # Wyznacz threshold dla bridge1
+                # Ustal threshold dla bridge1
                 threshold = MAYAN_PROFIT_THRESHOLD_ETH if info["bridge1"].lower() == "mayan" else PROFIT_THRESHOLD_ETH
-                # Sprawdź tylko super arbitrage
-                super_alert_threshold = Decimal("0.01")
-                if info["profit"] >= super_alert_threshold and info["profit"] >= threshold:
-                    header = "*SUPER ARBITRAGE ALERT*"
+                if info["profit"] >= threshold:
+                    # Nagłówek zależny od wartości profit
+                    alert_threshold = Decimal("0.01")
+                    header = "*SUPER ARBITRAGE ALERT*" if info["profit"] >= alert_threshold else "*ARBITRAGE ALERT*"
                     msg = (
                         f"{header}\n"
                         f"`Profit: {info['profit']:.6f} ETH`\n"
