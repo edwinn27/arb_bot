@@ -13,9 +13,9 @@ BASE_WALLET = os.environ.get("BASE_WALLET")
 SOLANA_WALLET = os.environ.get("SOLANA_WALLET")
 
 BASE_AMOUNT_ETH = Decimal("2.0")
-PROFIT_THRESHOLD_ETH = Decimal("0.0025")
+PROFIT_THRESHOLD_ETH = Decimal("0.005")
 POLL_INTERVAL = 30.0
-MAYAN_PROFIT_THRESHOLD_ETH = Decimal("0.008")  # wyższy próg dla Mayan
+MAYAN_PROFIT_THRESHOLD_ETH = Decimal("0.01")  # wyższy próg dla Mayan
 
 # LI.FI chain IDs
 FROM_CHAIN = 8453                   # Base
@@ -148,10 +148,12 @@ async def main_loop():
             start = time.time()
             info = await check_once(session)
             if info:
+                # Wyznacz threshold dla bridge1
                 threshold = MAYAN_PROFIT_THRESHOLD_ETH if info["bridge1"].lower() == "mayan" else PROFIT_THRESHOLD_ETH
-                if info["profit"] >= threshold:
-                    alert_threshold = Decimal("0.01")
-                    header = "*SUPER ARBITRAGE ALERT*" if info["profit"] >= alert_threshold else "*ARBITRAGE ALERT*"
+                # Sprawdź tylko super arbitrage
+                super_alert_threshold = Decimal("0.01")
+                if info["profit"] >= super_alert_threshold and info["profit"] >= threshold:
+                    header = "*SUPER ARBITRAGE ALERT*"
                     msg = (
                         f"{header}\n"
                         f"`Profit: {info['profit']:.6f} ETH`\n"
