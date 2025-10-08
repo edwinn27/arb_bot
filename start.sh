@@ -1,2 +1,2 @@
 #!/bin/bash
-python arb_bot.py
+python3 arb_bot.py
