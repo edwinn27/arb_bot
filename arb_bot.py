@@ -13,9 +13,9 @@ BASE_WALLET = os.environ.get("BASE_WALLET")
 SOLANA_WALLET = os.environ.get("SOLANA_WALLET")
 
 BASE_AMOUNT_ETH = Decimal("2.0")
-PROFIT_THRESHOLD_ETH = Decimal("0.002")
+PROFIT_THRESHOLD_ETH = Decimal("0.004")
 POLL_INTERVAL = 30.0
-MAYAN_PROFIT_THRESHOLD_ETH = Decimal("0.006")  # wyższy próg dla Mayan
+MAYAN_PROFIT_THRESHOLD_ETH = Decimal("0.008")  # wyższy próg dla Mayan
 
 # LI.FI chain IDs
 FROM_CHAIN = 8453                   # Base
