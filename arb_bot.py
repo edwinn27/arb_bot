@@ -15,7 +15,7 @@ SOLANA_WALLET = os.environ.get("SOLANA_WALLET")
 BASE_AMOUNT_ETH = Decimal("2.0")
 PROFIT_THRESHOLD_ETH = Decimal("0.002")
 POLL_INTERVAL = 30.0
-MAYAN_PROFIT_THRESHOLD_ETH = Decimal("0.01")  # wyższy próg dla Mayan
+MAYAN_PROFIT_THRESHOLD_ETH = Decimal("0.008")  # wyższy próg dla Mayan
 
 # LI.FI chain IDs
 FROM_CHAIN = 8453                   # Base
@@ -130,23 +130,19 @@ async def check_once(session):
     profit = eth_back - BASE_AMOUNT_ETH
     pct = (profit / BASE_AMOUNT_ETH * 100) if BASE_AMOUNT_ETH != 0 else 0
 
-    color_green = "\033[1;92m"   # jasny zielony, pogrubiony
-    color_gray = "\033[2;37m"    # jaśniejszy szary, widoczniejszy na ciemnym tle
+    color_green = "\033[1;92m"   # jasny, pogrubiony zielony
+    color_gray = "\033[2;37m"    # jasny szary, czytelniejszy
     color_reset = "\033[0m"
 
-    profit_mark = "▲" if profit > 0 else "▼"
     color = color_green if profit > PROFIT_THRESHOLD_ETH else color_gray
+    profit_mark = "▲" if profit > 0 else "▼"
 
     print(
-        f"{color}\n"
-        f"==================== [ {now_ts()} ] ====================\n"
-        f"{profit_mark}  BASE → SOL  : {sol_amount:.6f} SOL  via {bridge1}\n"
-        f"{profit_mark}  SOL  → BASE : {eth_back:.6f} ETH  via {bridge2}\n"
-        f"--------------------------------------------------------\n"
-        f" PROFIT : {profit:+.6f} ETH  ({pct:+.3f}%)\n"
-        f"========================================================\n"
-        f"{color_reset}"
+        f"{color}[{now_ts()}] {profit_mark} "
+        f"2 ETH → {sol_amount:.6f} SOL ({bridge1}) → {eth_back:.6f} ETH ({bridge2}) "
+        f"| PROFIT: {profit:+.6f} ETH ({pct:+.3f}%) {color_reset}"
     )
+
 
     return {"profit": profit, "eth_back": eth_back, "sol_amount": sol_amount, "bridge1": bridge1, "bridge2": bridge2}
 
