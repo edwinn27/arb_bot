@@ -130,8 +130,8 @@ async def check_once(session):
     profit = eth_back - BASE_AMOUNT_ETH
     pct = (profit / BASE_AMOUNT_ETH * 100) if BASE_AMOUNT_ETH != 0 else 0
 
-    color_green = "\033[1;92m"   # jasny, pogrubiony zielony
-    color_gray = "\033[2;37m"    # jasny szary, czytelniejszy
+    color_green = "\033[1;38;5;46m"   # intensywny, jaskrawy zielony
+    color_gray = "\033[38;5;240m"     # wyblakły szary
     color_reset = "\033[0m"
 
     color = color_green if profit > PROFIT_THRESHOLD_ETH else color_gray
