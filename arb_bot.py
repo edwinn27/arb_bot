@@ -145,7 +145,7 @@ async def check_once(session):
     profit_str = f"{profit:+.6f}"
     pct_str = f"{pct:+.3f}"
 
-   print(
+    print(
         f"{color}[{now_ts()}] {profit_mark} "
         f"2 ETH → {sol_str:>10} SOL ({bridge1_str}) → {eth_back_str:>10} ETH ({bridge2_str}) "
         f"| PROFIT: {profit_str:>10} ETH ({pct_str:>7}%) {color_reset}"
