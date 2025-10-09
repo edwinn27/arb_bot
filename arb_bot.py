@@ -130,17 +130,25 @@ async def check_once(session):
     profit = eth_back - BASE_AMOUNT_ETH
     pct = (profit / BASE_AMOUNT_ETH * 100) if BASE_AMOUNT_ETH != 0 else 0
 
-    color_green = "\033[1;38;5;46m"   # intensywny, jaskrawy zielony
+    color_green = "\033[1;38;5;46m"   # intensywny zielony
     color_gray = "\033[38;5;240m"     # wyblakły szary
     color_reset = "\033[0m"
 
     color = color_green if profit > PROFIT_THRESHOLD_ETH else color_gray
     profit_mark = "▲" if profit > 0 else "▼"
 
+    # Ustal szerokości kolumn
+    sol_str = f"{sol_amount:.6f}"
+    eth_back_str = f"{eth_back:.6f}"
+    bridge1_str = f"{bridge1:<15}"[:15]
+    bridge2_str = f"{bridge2:<15}"[:15]
+    profit_str = f"{profit:+.6f}"
+    pct_str = f"{pct:+.3f}"
+
     print(
         f"{color}[{now_ts()}] {profit_mark} "
-        f"2 ETH → {sol_amount:.6f} SOL ({bridge1}) → {eth_back:.6f} ETH ({bridge2}) "
-        f"| PROFIT: {profit:+.6f} ETH ({pct:+.3f}%) {color_reset}"
+        f"2 ETH → {sol_str:>10} SOL ({bridge1_str}) → {eth_back_str:>10} ETH ({bridge2_str}) "
+        f"| PROFIT: {profit_str:>+10} ETH ({pct_str:>7}%) {color_reset}"
     )
 
 
