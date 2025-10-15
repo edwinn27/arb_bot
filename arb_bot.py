@@ -84,28 +84,21 @@ def parse_jumper_to_amount(data):
         if not routes:
             raise RuntimeError("Brak tras w odpowiedzi Jumper")
 
-        valid_routes = []
-        for r in routes:
-            steps = r.get("steps", [])
-            tools = [s.get("tool", "").lower() for s in steps]
-            # Odrzuć tylko te, które mają jednocześnie CCTP i Mayan
-            if any("cctp" in t for t in tools) and any("mayan" in t for t in tools):
-                continue
-            valid_routes.append(r)
+        # wybierz trasę z największym toAmount
+        def get_amount(r):
+            a = r.get("toAmount") or r.get("toAmountMin")
+            return Decimal(a) if a else Decimal(0)
 
-        if not valid_routes:
-            raise RuntimeError("Brak tras po filtracji (usunieto cctp+mayan)")
-
-        # Pierwsza trasa po filtracji
-        route = valid_routes[0]
+        route = max(routes, key=get_amount)
 
         to_amount_raw = route.get("toAmount") or route.get("toAmountMin")
         if not to_amount_raw:
-            raise RuntimeError("Brak pola toAmount w odpowiedzi Jumper")
+            raise RuntimeError("Brak pola toAmount")
 
         to_amount = Decimal(to_amount_raw)
         decimals = int(route["toToken"]["decimals"])
-        tool = route["steps"][0]["tool"]
+        steps = [s.get("tool", "") for s in route.get("steps", [])]
+        tool = " + ".join(steps)  # pelna lista mostów w kolejności
 
         return to_amount, decimals, tool
     except Exception as e:
