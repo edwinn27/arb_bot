@@ -15,7 +15,7 @@ SOLANA_WALLET = os.environ.get("SOLANA_WALLET")
 BASE_AMOUNT_ETH = Decimal("2.0")
 PROFIT_THRESHOLD_ETH = Decimal("0.003")
 POLL_INTERVAL = 30.0
-MAYAN_PROFIT_THRESHOLD_ETH = Decimal("0.006")  # wyższy próg dla Mayan
+MAYAN_PROFIT_THRESHOLD_ETH = Decimal("0.006")
 
 # LI.FI chain IDs
 FROM_CHAIN = 8453                   # Base
@@ -38,7 +38,7 @@ async def send_telegram_message(session, token, chat_id, text):
         except Exception:
             return {"ok": False, "status": resp.status, "text": await resp.text()}
 
-async def get_jumper_route(from_address, to_address, from_chain, to_chain, from_token, to_token, from_amount):
+async def get_jumper_routes(session, from_address, to_address, from_chain, to_chain, from_token, to_token, from_amount):
     url = "https://api.jumper.exchange/p/lifi/advanced/routes"
     headers = {
         "accept": "*/*",
@@ -67,42 +67,11 @@ async def get_jumper_route(from_address, to_address, from_chain, to_chain, from_
         }
     }
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, headers=headers, json=payload) as resp:
-            try:
-                data = await resp.json()
-                if "routes" not in data or not data["routes"]:
-                    raise RuntimeError("No routes found")
-                return data
-            except Exception:
-                text = await resp.text()
-                raise RuntimeError(f"Invalid JSON from Jumper: {text}")
-
-def parse_jumper_to_amount(data):
-    try:
-        routes = data.get("routes", [])
-        if not routes:
-            raise RuntimeError("Brak tras w odpowiedzi Jumper")
-
-        # wybierz trasę z największym toAmount
-        def get_amount(r):
-            a = r.get("toAmount") or r.get("toAmountMin")
-            return Decimal(a) if a else Decimal(0)
-
-        route = max(routes, key=get_amount)
-
-        to_amount_raw = route.get("toAmount") or route.get("toAmountMin")
-        if not to_amount_raw:
-            raise RuntimeError("Brak pola toAmount")
-
-        to_amount = Decimal(to_amount_raw)
-        decimals = int(route["toToken"]["decimals"])
-        steps = [s.get("tool", "") for s in route.get("steps", [])]
-        tool = " + ".join(steps)  # pelna lista mostów w kolejności
-
-        return to_amount, decimals, tool
-    except Exception as e:
-        raise RuntimeError(f"Error parsing Jumper route: {e}")
+    async with session.post(url, headers=headers, json=payload) as resp:
+        data = await resp.json()
+        if "routes" not in data or not data["routes"]:
+            raise RuntimeError(f"No routes found. Raw: {await resp.text()}")
+        return data["routes"]
 
 def to_smallest_unit(amount_decimal: Decimal, decimals: int) -> str:
     scaled = (amount_decimal * (Decimal(10) ** decimals)).to_integral_value()
@@ -111,49 +80,69 @@ def to_smallest_unit(amount_decimal: Decimal, decimals: int) -> str:
 def from_smallest_unit(amount_str: str, decimals: int) -> Decimal:
     return Decimal(str(amount_str)) / (Decimal(10) ** decimals)
 
+def pick_best_route(routes):
+    def route_value(r):
+        val = r.get("toAmount") or r.get("toAmountMin")
+        return Decimal(val) if val else Decimal(0)
+    return max(routes, key=route_value)
+
+def format_route_list(routes, token_decimals, direction):
+    """Czytelne wypisanie wszystkich tras."""
+    out = [f"\n=== Wszystkie trasy {direction} ==="]
+    best = pick_best_route(routes)
+    best_amount = Decimal(best.get("toAmount") or best.get("toAmountMin"))
+    for i, r in enumerate(routes, 1):
+        steps = [s.get("tool", "") for s in r.get("steps", [])]
+        name = " + ".join(steps)
+        to_raw = r.get("toAmount") or r.get("toAmountMin")
+        amount = from_smallest_unit(to_raw, token_decimals)
+        diff = amount - from_smallest_unit(best_amount, token_decimals)
+        out.append(f"{i:02d}. {name:<40} | {amount:.6f} ({diff:+.6f} od najlepszej)")
+    return "\n".join(out)
+
 async def check_once(session):
     from_amount_smallest = int(BASE_AMOUNT_ETH * (10 ** 18))
     try:
-        data1 = await get_jumper_route(BASE_WALLET, SOLANA_WALLET, FROM_CHAIN, MIDDLE_CHAIN, EVM_NATIVE, SOL_NATIVE, from_amount_smallest)
-        to_amount_raw_1, sol_decimals, bridge1 = parse_jumper_to_amount(data1)
+        routes_fwd = await get_jumper_routes(session, BASE_WALLET, SOLANA_WALLET, FROM_CHAIN, MIDDLE_CHAIN, EVM_NATIVE, SOL_NATIVE, from_amount_smallest)
+        best_fwd = pick_best_route(routes_fwd)
+        to_amount_raw_1 = best_fwd.get("toAmount") or best_fwd.get("toAmountMin")
+        sol_decimals = int(best_fwd["toToken"]["decimals"])
+        bridge1 = " + ".join([s.get("tool", "") for s in best_fwd.get("steps", [])])
         sol_amount = from_smallest_unit(to_amount_raw_1, sol_decimals)
     except Exception as e:
-        print(f"[{now_ts()}] Error BASE->SOL via Jumper: {e}")
+        print(f"[{now_ts()}] Error BASE->SOL: {e}")
         return None
 
     sol_amount_smallest = to_smallest_unit(sol_amount, sol_decimals)
     try:
-        data2 = await get_jumper_route(SOLANA_WALLET, BASE_WALLET, MIDDLE_CHAIN, TO_CHAIN, SOL_NATIVE, EVM_NATIVE, sol_amount_smallest)
-        to_amount_raw_2, eth_decimals_resp, bridge2 = parse_jumper_to_amount(data2)
+        routes_back = await get_jumper_routes(session, SOLANA_WALLET, BASE_WALLET, MIDDLE_CHAIN, TO_CHAIN, SOL_NATIVE, EVM_NATIVE, sol_amount_smallest)
+        best_back = pick_best_route(routes_back)
+        to_amount_raw_2 = best_back.get("toAmount") or best_back.get("toAmountMin")
+        eth_decimals_resp = int(best_back["toToken"]["decimals"])
+        bridge2 = " + ".join([s.get("tool", "") for s in best_back.get("steps", [])])
         eth_back = from_smallest_unit(to_amount_raw_2, eth_decimals_resp)
     except Exception as e:
-        print(f"[{now_ts()}] Error SOL->BASE via Jumper: {e}")
+        print(f"[{now_ts()}] Error SOL->BASE: {e}")
         return None
 
     profit = eth_back - BASE_AMOUNT_ETH
     pct = (profit / BASE_AMOUNT_ETH * 100) if BASE_AMOUNT_ETH != 0 else 0
 
-    color_green = "\033[1;38;5;46m"   # intensywny zielony
-    color_gray = "\033[38;5;240m"     # wyblakły szary
+    color_green = "\033[1;38;5;46m"
+    color_gray = "\033[38;5;240m"
     color_reset = "\033[0m"
-
     color = color_green if profit > PROFIT_THRESHOLD_ETH else color_gray
     profit_mark = "▲" if profit > 0 else "▼"
 
-    # Ustal szerokości kolumn
-    sol_str = f"{sol_amount:.6f}"
-    eth_back_str = f"{eth_back:.6f}"
-    bridge1_str = f"{bridge1:<15}"[:15]
-    bridge2_str = f"{bridge2:<15}"[:15]
-    profit_str = f"{profit:+.6f}"
-    pct_str = f"{pct:+.3f}"
-
     print(
         f"{color}[{now_ts()}] {profit_mark} "
-        f"2 ETH → {sol_str:>10} SOL ({bridge1_str}) → {eth_back_str:>10} ETH ({bridge2_str}) "
-        f"| PROFIT: {profit_str:>10} ETH ({pct_str:>7}%) {color_reset}"
+        f"2 ETH → {sol_amount:.6f} SOL ({bridge1}) → {eth_back:.6f} ETH ({bridge2}) "
+        f"| PROFIT: {profit:+.6f} ETH ({pct:+.3f}%) {color_reset}"
     )
 
+    # wypisz pełne listy tras
+    print(format_route_list(routes_fwd, sol_decimals, "Base → Solana"))
+    print(format_route_list(routes_back, eth_decimals_resp, "Solana → Base"))
 
     return {"profit": profit, "eth_back": eth_back, "sol_amount": sol_amount, "bridge1": bridge1, "bridge2": bridge2}
 
@@ -161,29 +150,7 @@ async def main_loop():
     async with aiohttp.ClientSession() as session:
         while True:
             start = time.time()
-            info = await check_once(session)
-            if info:
-                # Ustal threshold dla bridge1
-                threshold = MAYAN_PROFIT_THRESHOLD_ETH if info["bridge1"].lower() == "mayan" else PROFIT_THRESHOLD_ETH
-                if info["profit"] >= threshold:
-                    # Nagłówek zależny od wartości profit
-                    alert_threshold = Decimal("0.01")
-                    header = "*SUPER ARBITRAGE ALERT*" if info["profit"] >= alert_threshold else "*ARBITRAGE ALERT*"
-                    msg = (
-                        f"{header}\n"
-                        f"`Profit: {info['profit']:.6f} ETH`\n"
-                        f"----------------------------\n"
-                        f"*Bridge 1:* {info['bridge1']} (Base→Solana)\n"
-                        f"*Bridge 2:* {info['bridge2']} (Solana→Base)\n"
-                        f"*Received:* `{info['sol_amount']:.6f} SOL`\n"
-                        f"*Returned:* `{info['eth_back']:.6f} ETH`\n"
-                        f"----------------------------"
-                    )
-                    try:
-                        await send_telegram_message(session, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg)
-                    except Exception as e:
-                        print(f"[{now_ts()}] Telegram send error: {e}")
-
+            await check_once(session)
             elapsed = time.time() - start
             await asyncio.sleep(max(0.1, POLL_INTERVAL - elapsed))
 
