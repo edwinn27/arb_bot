@@ -80,14 +80,11 @@ async def get_jumper_route(from_address, to_address, from_chain, to_chain, from_
 
 def parse_jumper_to_amount(data):
     try:
-        route = None
-        for r in data.get("routes", []):
-            tool = r.get("steps", [{}])[0].get("tool", "").lower()
-            if "mayanmctp" not in tool:
-                route = r
-                break
-        if route is None:
-            raise RuntimeError("No valid route found (cctp+mayan ignored)")
+        routes = data.get("routes", [])
+        if not routes:
+            raise RuntimeError("No routes found")
+
+        route = routes[0]
 
         to_amount_raw = route.get("toAmount") or route.get("toAmountMin")
         if not to_amount_raw:
